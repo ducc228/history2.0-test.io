@@ -573,9 +573,9 @@ function showResults() {
 }
 
 function startNewTest() {
-    selectedQuestions = shufflePickN(allQuestions, 20);
+    selectedQuestions = shufflePickN(allQuestions, 40);
     currentIndex = 0;
-    userAnswers = new Array(20).fill(null);
+    userAnswers = new Array(40).fill(null);
     selectedOptionValue = null;
     renderQuestion();
 }
