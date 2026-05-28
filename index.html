@@ -103,6 +103,13 @@
             background: #0f5132;
             color: white;
         }
+        input[type="checkbox"], input[type="radio"] {
+            transform: scale(1.2);
+            margin-right: 8px;
+        }
+        .option input {
+            margin-right: 12px;
+        }
         .button-group {
             display: flex;
             gap: 15px;
@@ -176,7 +183,7 @@
 <div class="container">
     <div class="header">
         <h1>📚 Алгоритмизация и программирование</h1>
-        <p>40 случайных вопросов из базы | Выберите ответ и нажмите «Далее»</p>
+        <p>40 случайных вопросов | Для вопросов с несколькими ответами используйте чекбоксы</p>
     </div>
     <div class="content" id="mainContent"></div>
     <div class="footer">❤️ Проверьте свои знания</div>
@@ -184,7 +191,7 @@
 
 <script>
 // ============================================================
-// БАЗА ВОПРОСОВ (все 90 вопросов из вашего файла)
+// БАЗА ВОПРОСОВ (те же 90 вопросов, с массивами для множественных ответов)
 // ============================================================
 const allQuestions = [
     {"question":"Что является целью изучения дисциплины «Алгоритмизация и программирование»?","options":["изучение теоретических основ программирования и приобретение навыков разработки алгоритмов и перевода их в программы","изучение артефактов, связанных со сбором, хранением, передачей, обработкой данных"],"answer":1},
@@ -279,46 +286,65 @@ const allQuestions = [
     {"question":"Какое действие реализует оператор InputBox?","options":["ввод с экрана","вывод на экран","ввод из ячеек"],"answer":1}
 ];
 
-// --- Логика теста (40 случайных вопросов) ---
+// --- Логика теста (40 случайных вопросов, поддержка множественного выбора) ---
 let selectedQuestions = [];
 let currentIndex = 0;
-let userAnswers = [];
-let selectedOptionValue = null;
-const contentDiv = document.getElementById('mainContent');
+let userAnswers = [];   // для каждого вопроса: для одиночного – число, для множественного – массив чисел
+let contentDiv = document.getElementById('mainContent');
 
 function shufflePickN(arr, n) {
-    const shuffled = [...arr];
+    let shuffled = [...arr];
     for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        let j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled.slice(0, n);
 }
 
 function renderQuestion() {
-    const q = selectedQuestions[currentIndex];
-    const saved = userAnswers[currentIndex];
+    let q = selectedQuestions[currentIndex];
+    let saved = userAnswers[currentIndex];
+    let isMultiple = Array.isArray(q.answer);
     let optionsHtml = '';
     q.options.forEach((opt, idx) => {
-        const optNum = idx + 1;
+        let optNum = idx + 1;
+        let checked = false;
+        if (saved !== null && saved !== undefined) {
+            if (isMultiple) {
+                if (Array.isArray(saved) && saved.includes(optNum)) checked = true;
+            } else {
+                if (saved === optNum) checked = true;
+            }
+        }
+        let inputType = isMultiple ? 'checkbox' : 'radio';
+        let inputName = isMultiple ? `q${currentIndex}` : 'answer';
         optionsHtml += `
             <div class="option" data-opt="${optNum}">
-                <div class="option-prefix">${optNum}</div>
-                <div>${opt}</div>
+                <label style="display: flex; align-items: center; gap: 12px; width: 100%; cursor: pointer;">
+                    <input type="${inputType}" name="${inputName}" value="${optNum}" ${checked ? 'checked' : ''}>
+                    <div class="option-prefix">${optNum}</div>
+                    <div>${opt}</div>
+                </label>
             </div>
         `;
     });
-    const html = `
+    let hint = isMultiple ? '<small style="display:block; margin-bottom:10px;">* Выберите все подходящие варианты</small>' : '';
+    let html = `
         <div class="progress">
             <span class="question-counter">Вопрос ${currentIndex+1} из ${selectedQuestions.length}</span>
             <span class="score-badge" id="scorePreview">✅ Правильных: ${userAnswers.filter((a,i)=> {
                 if (a === null) return false;
-                const ans = selectedQuestions[i]?.answer;
-                if (Array.isArray(ans)) return ans.includes(a);
-                return a === ans;
+                let ans = selectedQuestions[i]?.answer;
+                if (Array.isArray(ans)) {
+                    if (!Array.isArray(a)) return false;
+                    return ans.length === a.length && ans.every(v => a.includes(v));
+                } else {
+                    return a === ans;
+                }
             }).length}</span>
         </div>
         <div class="question-text">${q.question}</div>
+        ${hint}
         <div class="options-area" id="optionsArea">
             ${optionsHtml}
         </div>
@@ -330,14 +356,20 @@ function renderQuestion() {
     `;
     contentDiv.innerHTML = html;
     
-    document.querySelectorAll('.option').forEach(el => {
-        const val = parseInt(el.dataset.opt);
-        if (saved === val) el.classList.add('selected');
-        el.addEventListener('click', () => {
-            document.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
-            el.classList.add('selected');
-            selectedOptionValue = val;
-            userAnswers[currentIndex] = selectedOptionValue;
+    // Сохраняем ответ при изменении
+    let inputs = document.querySelectorAll('.option input');
+    inputs.forEach(input => {
+        input.addEventListener('change', () => {
+            let selectedValues = [];
+            if (isMultiple) {
+                let checkedBoxes = document.querySelectorAll(`.option input[type="checkbox"]:checked`);
+                checkedBoxes.forEach(cb => selectedValues.push(parseInt(cb.value)));
+                userAnswers[currentIndex] = selectedValues.sort((a,b)=>a-b);
+            } else {
+                let checkedRadio = document.querySelector(`.option input[type="radio"]:checked`);
+                if (checkedRadio) userAnswers[currentIndex] = parseInt(checkedRadio.value);
+                else userAnswers[currentIndex] = null;
+            }
             updateScorePreview();
         });
     });
@@ -349,8 +381,10 @@ function renderQuestion() {
         }
     });
     document.getElementById('nextBtn')?.addEventListener('click', () => {
-        if (userAnswers[currentIndex] === null) {
-            alert('Пожалуйста, выберите вариант ответа.');
+        // Проверяем, выбран ли ответ
+        let currentAnswer = userAnswers[currentIndex];
+        if (currentAnswer === null || (Array.isArray(currentAnswer) && currentAnswer.length === 0)) {
+            alert('Пожалуйста, выберите вариант(ы) ответа.');
             return;
         }
         if (currentIndex === selectedQuestions.length - 1) {
@@ -360,19 +394,21 @@ function renderQuestion() {
             renderQuestion();
         }
     });
-    document.getElementById('restartBtn')?.addEventListener('click', () => {
-        startNewTest();
-    });
+    document.getElementById('restartBtn')?.addEventListener('click', () => startNewTest());
 }
 
 function updateScorePreview() {
-    const correctNow = userAnswers.filter((a,i)=> {
+    let correctNow = userAnswers.filter((a,i)=> {
         if (a === null) return false;
-        const ans = selectedQuestions[i]?.answer;
-        if (Array.isArray(ans)) return ans.includes(a);
-        return a === ans;
+        let ans = selectedQuestions[i]?.answer;
+        if (Array.isArray(ans)) {
+            if (!Array.isArray(a)) return false;
+            return ans.length === a.length && ans.every(v => a.includes(v));
+        } else {
+            return a === ans;
+        }
     }).length;
-    const previewSpan = document.getElementById('scorePreview');
+    let previewSpan = document.getElementById('scorePreview');
     if (previewSpan) previewSpan.innerText = `✅ Правильных: ${correctNow}`;
 }
 
@@ -380,19 +416,27 @@ function showResults() {
     let correctCount = 0;
     let detailsHtml = '';
     for (let i = 0; i < selectedQuestions.length; i++) {
-        const q = selectedQuestions[i];
-        const user = userAnswers[i];
+        let q = selectedQuestions[i];
+        let user = userAnswers[i];
         let isCorrect = false;
         if (Array.isArray(q.answer)) {
-            isCorrect = (user !== null && q.answer.includes(user));
+            if (Array.isArray(user) && user.length === q.answer.length && q.answer.every(v => user.includes(v))) {
+                isCorrect = true;
+            }
         } else {
-            isCorrect = (user === q.answer);
+            if (user === q.answer) isCorrect = true;
         }
         if (isCorrect) correctCount++;
-        const userText = user ? q.options[user-1] : 'Нет ответа';
-        const correctAnsText = Array.isArray(q.answer) 
-            ? q.answer.map(a => a + ": " + q.options[a-1]).join(", ")
-            : (q.answer + ": " + q.options[q.answer-1]);
+        let userText;
+        if (user === null || (Array.isArray(user) && user.length === 0)) userText = 'Нет ответа';
+        else if (Array.isArray(user)) userText = user.map(v => v + ": " + q.options[v-1]).join(", ");
+        else userText = user + ": " + q.options[user-1];
+        let correctAnsText;
+        if (Array.isArray(q.answer)) {
+            correctAnsText = q.answer.map(v => v + ": " + q.options[v-1]).join(", ");
+        } else {
+            correctAnsText = q.answer + ": " + q.options[q.answer-1];
+        }
         detailsHtml += `<div style="margin-bottom: 8px; padding: 6px; border-bottom: 1px solid #e2e8f0;">
             <b>Вопрос ${i+1}:</b> ${q.question}<br>
             📌 Ваш ответ: ${userText}<br>
@@ -400,7 +444,7 @@ function showResults() {
             ${isCorrect ? '🟢 Верно' : '🔴 Неверно'}
         </div>`;
     }
-    const percent = (correctCount / selectedQuestions.length * 100).toFixed(1);
+    let percent = (correctCount / selectedQuestions.length * 100).toFixed(1);
     contentDiv.innerHTML = `
         <div class="result-area">
             <div class="result-stats">🏆 Результат: ${correctCount} из ${selectedQuestions.length} (${percent}%)</div>
@@ -416,7 +460,6 @@ function startNewTest() {
     selectedQuestions = shufflePickN(allQuestions, 40);
     currentIndex = 0;
     userAnswers = new Array(40).fill(null);
-    selectedOptionValue = null;
     renderQuestion();
 }
 
